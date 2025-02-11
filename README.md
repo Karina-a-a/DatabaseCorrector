@@ -35,7 +35,7 @@ DatabaseCorrector – это Python-скрипт для автоматическ
 
 
 4. Запуск коррекции
-python main.py
+python database_corrector.py
 
 
 **Использование**
