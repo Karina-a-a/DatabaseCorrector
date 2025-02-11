@@ -13,7 +13,7 @@ DatabaseCorrector – это Python-скрипт для автоматическ
 **Установка и запуск**
 1. Клонирование репозитория
    
- *git clone https://github.com/your-username/DatabaseCorrector.git* 
+ *git clone https://github.com/Karina-a-a/DatabaseCorrector.git* 
  
  *cd DatabaseCorrector* 
   
