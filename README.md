@@ -24,7 +24,7 @@ DatabaseCorrector – это Python-скрипт для автоматическ
   
 3. Настройка подключения к БД
    
-Откройте main.py и укажите параметры подключения:
+Откройте database_corrector.py и укажите параметры подключения:
 
 *reference_db = "postgresql://user:password@localhost/reference_db"*
 
