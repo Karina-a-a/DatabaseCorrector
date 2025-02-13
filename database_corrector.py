@@ -4,7 +4,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 # Настройка логирования
 logging.basicConfig(
-    filename="db_sync.log",
+    filename="../db_sync.log",
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
@@ -24,16 +24,16 @@ class DatabaseCorrector:
         self.target_db_url = target_db_url
         self.reference_engine = None
         self.target_engine = None
-        self.reference_metadata = None
-        self.target_metadata = None
+        self.reference_metadata = MetaData()
+        self.target_metadata = MetaData()
 
     def connect_to_databases(self):
         """Устанавливает соединения с базами данных."""
         try:
             self.reference_engine = create_engine(self.reference_db_url)
             self.target_engine = create_engine(self.target_db_url)
-            self.reference_metadata = MetaData(bind=self.reference_engine)
-            self.target_metadata = MetaData(bind=self.target_engine)
+            self.reference_metadata.reflect(bind=self.reference_engine)
+            self.target_metadata.reflect(bind=self.target_engine)
             logging.info("Соединение с базами данных успешно установлено.")
         except SQLAlchemyError as e:
             logging.error(f"Ошибка подключения к БД: {e}")
@@ -63,28 +63,32 @@ class DatabaseCorrector:
             with self.reference_engine.connect() as ref_conn, self.target_engine.connect() as target_conn:
                 transaction = target_conn.begin()  # Открываем транзакцию
 
-                ref_data = ref_conn.execute(select(reference_table)).fetchall()
-                target_data = target_conn.execute(select(target_table)).fetchall()
+                try:
+                    ref_data = ref_conn.execute(select(reference_table)).fetchall()
+                    target_data = target_conn.execute(select(target_table)).fetchall()
 
-                ref_dict = {row[key_column]: row for row in ref_data}
-                target_dict = {row[key_column]: row for row in target_data}
+                    ref_dict = {row[key_column]: row._asdict() for row in ref_data}
+                    target_dict = {row[key_column]: row._asdict() for row in target_data}
 
-                for key, ref_row in ref_dict.items():
-                    if key not in target_dict:
-                        # Добавляем запись, если её нет во второй БД
-                        insert_stmt = insert(target_table).values(dict(ref_row))
-                        target_conn.execute(insert_stmt)
-                        logging.info(f"Добавлена новая запись в {table_name}: {dict(ref_row)}")
+                    for key, ref_row in ref_dict.items():
+                        if key not in target_dict:
+                            # Добавляем запись, если её нет во второй БД
+                            insert_stmt = insert(target_table).values(ref_row)
+                            target_conn.execute(insert_stmt)
+                            logging.info(f"Добавлена новая запись в {table_name}: {ref_row}")
 
-                    elif ref_row != target_dict[key]:
-                        # Обновляем запись, если она отличается
-                        update_stmt = update(target_table).where(target_table.c[key_column] == key).values(
-                            dict(ref_row))
-                        target_conn.execute(update_stmt)
-                        logging.info(f"Обновлена запись в {table_name}, ключ {key}: {dict(ref_row)}")
+                        elif ref_row != target_dict[key]:
+                            # Обновляем запись, если она отличается
+                            update_stmt = update(target_table).where(target_table.c[key_column] == key).values(ref_row)
+                            target_conn.execute(update_stmt)
+                            logging.info(f"Обновлена запись в {table_name}, ключ {key}: {ref_row}")
 
-                transaction.commit()  # Фиксируем изменения
-                logging.info(f"Коррекция таблицы {table_name} завершена.")
+                    transaction.commit()  # Фиксируем изменения
+                    logging.info(f"Коррекция таблицы {table_name} завершена.")
+                except SQLAlchemyError as e:
+                    transaction.rollback()
+                    logging.error(f"Ошибка при коррекции таблицы {table_name}: {e}")
+                    raise
 
         except SQLAlchemyError as e:
             logging.error(f"Ошибка при коррекции таблицы {table_name}: {e}")
@@ -105,3 +109,17 @@ class DatabaseCorrector:
             logging.error(f"Ошибка при коррекции базы данных: {e}")
         finally:
             self.close_connections()
+
+
+if __name__ == "__main__":
+    # Пример использования
+    reference_db = ""   
+    target_db = "" 
+    
+    tables_to_correct = {
+        "users": "id",
+        "orders": "order_id"
+    }
+
+    corrector = DatabaseCorrector(reference_db, target_db)
+    corrector.correct_database(tables_to_correct)
